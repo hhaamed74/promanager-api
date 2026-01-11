@@ -1,6 +1,6 @@
 const Project = require("../models/Project");
 
-// 1. تعريف الدوال كمتغيرات (Constants) لضمان استقرارها في بيئة Serverless
+// 1. حذف كلمة next من كل الأقواس
 const createProject = async (req, res) => {
   try {
     const { title, description, status, priority, deadline, category } =
@@ -13,7 +13,7 @@ const createProject = async (req, res) => {
       priority,
       deadline,
       category,
-      // ملاحظة: memoryStorage مفيهاش path، لو بترفع صور استخدم Buffer أو Cloudinary
+      // استخدام originalname بدلاً من path للتوافق مع MemoryStorage
       image: req.file ? req.file.originalname : "",
       user: req.user.id,
     });
@@ -56,14 +56,13 @@ const updateProject = async (req, res) => {
 
     let updatedData = { ...req.body };
     if (req.file) {
-      updatedData.image = req.file.originalname;
+      updatedData.image = req.file.originalname; //
     }
 
     project = await Project.findByIdAndUpdate(req.params.id, updatedData, {
       new: true,
       runValidators: true,
     });
-
     res.json({ success: true, data: project });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -126,7 +125,6 @@ const getMyProjects = async (req, res) => {
   }
 };
 
-// 2. التصدير الموحد (أهم سطر عشان فيرسل يشوف الدوال صح وما يطلعش خطأ الـ next)
 module.exports = {
   createProject,
   getProjects,
@@ -135,4 +133,4 @@ module.exports = {
   getProjectById,
   getProjectStats,
   getMyProjects,
-};
+}; //
