@@ -7,25 +7,39 @@ const generateToken = (id) => {
 
 // --- تعريف الدوال ---
 
-const register = async (req, res, next) => {
+const register = async (req, res) => {
   try {
     const { name, email, password, confirmPassword, role } = req.body;
+
+    // 1. التحقق من البيانات
+    if (!name || !email || !password || !confirmPassword) {
+      return res
+        .status(400)
+        .json({ success: false, message: "برجاء ملء جميع الحقول" });
+    }
+
     const userExists = await User.findOne({ email });
-    if (userExists)
+    if (userExists) {
       return res
         .status(400)
         .json({ success: false, message: "هذا البريد مسجل بالفعل" });
-    if (password !== confirmPassword)
+    }
+
+    if (password !== confirmPassword) {
       return res
         .status(400)
         .json({ success: false, message: "كلمات المرور غير متطابقة" });
+    }
 
+    // 2. إنشاء المستخدم
     const user = await User.create({
       name,
       email,
       password,
       role: role || "user",
     });
+
+    // 3. الرد بنجاح
     return res.status(201).json({
       success: true,
       token: generateToken(user._id),
@@ -37,9 +51,12 @@ const register = async (req, res, next) => {
       },
     });
   } catch (error) {
-    return res
-      .status(500)
-      .json({ success: false, message: "خطأ داخلي: " + error.message });
+    // هنا كان الخطأ، شلنا كلمة next عشان ميطلعش Error
+    console.error("Register Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "خطأ في السيرفر: " + error.message,
+    });
   }
 };
 
