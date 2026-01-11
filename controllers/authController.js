@@ -5,8 +5,9 @@ const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "30d" });
 };
 
-// 1. تسجيل مستخدم جديد
-exports.register = async (req, res, next) => {
+// --- تعريف الدوال ---
+
+const register = async (req, res, next) => {
   try {
     const { name, email, password, confirmPassword, role } = req.body;
     const userExists = await User.findOne({ email });
@@ -14,7 +15,6 @@ exports.register = async (req, res, next) => {
       return res
         .status(400)
         .json({ success: false, message: "هذا البريد مسجل بالفعل" });
-
     if (password !== confirmPassword)
       return res
         .status(400)
@@ -26,7 +26,6 @@ exports.register = async (req, res, next) => {
       password,
       role: role || "user",
     });
-
     return res.status(201).json({
       success: true,
       token: generateToken(user._id),
@@ -44,19 +43,15 @@ exports.register = async (req, res, next) => {
   }
 };
 
-// 2. تسجيل الدخول
-exports.login = async (req, res, next) => {
-  // أضفنا next
+const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email }).select("+password");
-
     if (user && (await user.matchPassword(password))) {
       if (!user.isActive)
         return res
           .status(401)
           .json({ success: false, message: "هذا الحساب معطل" });
-
       return res.json({
         success: true,
         token: generateToken(user._id),
@@ -68,11 +63,10 @@ exports.login = async (req, res, next) => {
           avatar: user.avatar,
         },
       });
-    } else {
-      return res
-        .status(401)
-        .json({ success: false, message: "بيانات الدخول غير صحيحة" });
     }
+    return res
+      .status(401)
+      .json({ success: false, message: "بيانات الدخول غير صحيحة" });
   } catch (error) {
     return res
       .status(500)
@@ -80,49 +74,12 @@ exports.login = async (req, res, next) => {
   }
 };
 
-// 3. تحديث الملف الشخصي
-exports.updateUserProfile = async (req, res, next) => {
-  // أضفنا next
-  try {
-    const user = await User.findById(req.user.id);
-    if (!user)
-      return res
-        .status(404)
-        .json({ success: false, message: "المستخدم غير موجود" });
-
-    user.name = req.body.name || user.name;
-    user.email = req.body.email || user.email;
-    if (req.file) {
-      user.avatar = req.file.filename;
-    }
-
-    const updatedUser = await user.save();
-    return res.json({
-      success: true,
-      user: {
-        _id: updatedUser._id,
-        name: updatedUser.name,
-        email: updatedUser.email,
-        role: updatedUser.role,
-        avatar: updatedUser.avatar,
-      },
-    });
-  } catch (error) {
-    return res
-      .status(500)
-      .json({ success: false, message: "خطأ داخلي: " + error.message });
-  }
-};
-
-// 4. إحصائيات لوحة التحكم
-exports.getDashboardStats = async (req, res, next) => {
-  // أضفنا next
+const getDashboardStats = async (req, res, next) => {
   try {
     const usersCount = await User.countDocuments();
     const Project = require("../models/Project");
     const projectsCount = await Project.countDocuments();
     const completedProjects = await Project.countDocuments({ status: "مكتمل" });
-
     return res.json({
       success: true,
       stats: {
@@ -138,9 +95,28 @@ exports.getDashboardStats = async (req, res, next) => {
   }
 };
 
-// 5. جلب كل المستخدمين (لأدمن)
-exports.getAllUsers = async (req, res, next) => {
-  // أضفنا next
+const updateUserProfile = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "المستخدم غير موجود" });
+    user.name = req.body.name || user.name;
+    user.email = req.body.email || user.email;
+    if (req.file) {
+      user.avatar = req.file.filename;
+    }
+    const updatedUser = await user.save();
+    return res.json({ success: true, user: updatedUser });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ success: false, message: "خطأ داخلي: " + error.message });
+  }
+};
+
+const getAllUsers = async (req, res, next) => {
   try {
     const users = await User.find({}).sort("-createdAt");
     return res.json({ success: true, data: users });
@@ -151,9 +127,7 @@ exports.getAllUsers = async (req, res, next) => {
   }
 };
 
-// 6. حذف مستخدم
-exports.deleteUser = async (req, res, next) => {
-  // أضفنا next
+const deleteUser = async (req, res, next) => {
   try {
     await User.findByIdAndDelete(req.params.id);
     return res.json({ success: true, message: "تم الحذف بنجاح" });
@@ -164,9 +138,7 @@ exports.deleteUser = async (req, res, next) => {
   }
 };
 
-// 7. تغيير حالة المستخدم
-exports.toggleUserStatus = async (req, res, next) => {
-  // أضفنا next
+const toggleUserStatus = async (req, res, next) => {
   try {
     const user = await User.findById(req.params.id);
     user.isActive = !user.isActive;
@@ -183,9 +155,7 @@ exports.toggleUserStatus = async (req, res, next) => {
   }
 };
 
-// 8. جلب النشاطات الأخيرة
-exports.getActivities = async (req, res, next) => {
-  // أضفنا next
+const getActivities = async (req, res, next) => {
   try {
     const Project = require("../models/Project");
     const latestUsers = await User.find().sort({ createdAt: -1 }).limit(5);
@@ -193,7 +163,6 @@ exports.getActivities = async (req, res, next) => {
       .populate("user", "name")
       .sort({ createdAt: -1 })
       .limit(5);
-
     let notifications = [];
     latestUsers.forEach((u) =>
       notifications.push({
@@ -209,7 +178,6 @@ exports.getActivities = async (req, res, next) => {
         type: "project",
       })
     );
-
     notifications.sort((a, b) => new Date(b.date) - new Date(a.date));
     return res.json({ success: true, data: notifications.slice(0, 5) });
   } catch (error) {
@@ -217,4 +185,16 @@ exports.getActivities = async (req, res, next) => {
       .status(500)
       .json({ success: false, message: "خطأ داخلي: " + error.message });
   }
+};
+
+// --- التصدير النهائي ---
+module.exports = {
+  register,
+  login,
+  updateUserProfile,
+  getAllUsers,
+  getDashboardStats,
+  deleteUser,
+  toggleUserStatus,
+  getActivities,
 };

@@ -11,43 +11,28 @@ const protect = async (req, res, next) => {
       token = req.headers.authorization.split(" ")[1];
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       req.user = await User.findById(decoded.id).select("-password");
-
-      if (!req.user) {
+      if (!req.user)
         return res
           .status(401)
           .json({ success: false, message: "المستخدم غير موجود" });
-      }
-
-      if (!req.user.isActive) {
-        return res.status(401).json({ success: false, message: "الحساب معطل" });
-      }
-
-      return next(); // التأكد من وجود return لضمان عدم الاستمرار في حال الخطأ
+      return next();
     } catch (error) {
-      return res
-        .status(401)
-        .json({ success: false, message: "التوكن غير صالح" });
+      return res.status(401).json({ success: false, message: "توكن غير صالح" });
     }
   }
-
-  if (!token) {
+  if (!token)
     return res
       .status(401)
-      .json({ success: false, message: "برجاء تسجيل الدخول أولاً" });
-  }
+      .json({ success: false, message: "برجاء تسجيل الدخول" });
 };
 
 const authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.user || !roles.includes(req.user.role)) {
-      return res.status(403).json({
-        success: false,
-        message: `غير مسموح لهذا الدور (${req.user?.role}) بالوصول`,
-      });
+      return res.status(403).json({ success: false, message: "غير مسموح لك" });
     }
     next();
   };
 };
 
-// الطريقة الأضمن للتصدير في بيئة Vercel
 module.exports = { protect, authorize };
