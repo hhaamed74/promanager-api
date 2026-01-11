@@ -1,39 +1,28 @@
-const multer = require("multer"); // Import Multer for handling multipart/form-data (file uploads)
-const path = require("path"); // Import Path module to handle file extensions
+const multer = require("multer");
 
-// 1. Storage Configuration: Defines the destination and filename logic
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/"); // Files will be stored in the 'uploads' directory
-  },
-  filename: (req, file, cb) => {
-    // Generate a unique filename using the current timestamp and the original file name
-    cb(null, `${Date.now()}-${file.originalname}`);
-  },
-});
+// 1. استخدام MemoryStorage بدلاً من DiskStorage
+const storage = multer.memoryStorage();
 
-// 2. File Filter Configuration: Ensures only specific image types are allowed
+// 2. نفس الفلتر بتاعك (ممتاز ومش محتاج تغيير)
 const fileFilter = (req, file, cb) => {
-  const filetypes = /jpe?g|png|webp/; // Allowed extensions: jpg, jpeg, png, webp
-  const mimetypes = /image\/jpe?g|image\/png|image\/webp/; // Allowed MIME types
+  const filetypes = /jpe?g|png|webp/;
+  const mimetypes = /image\/jpe?g|image\/png|image\/webp/;
 
-  // Validate the file extension and the mimetype
-  const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
+  const extname = filetypes.test(file.originalname.toLowerCase());
   const mimetype = mimetypes.test(file.mimetype);
 
   if (extname && mimetype) {
-    cb(null, true); // Accept the file
+    cb(null, true);
   } else {
-    // Reject the file with an Arabic error message for the user
     cb(new Error("مسموح برفع الصور فقط (jpg, png, webp)"), false);
   }
 };
 
-// 3. Multer Middleware Initialization
+// 3. الإعدادات النهائية
 const upload = multer({
-  storage, // Apply the storage configuration defined above
-  fileFilter, // Apply the file type restrictions
-  limits: { fileSize: 5 * 1024 * 1024 }, // Set maximum file size limit to 5MB
+  storage,
+  fileFilter,
+  limits: { fileSize: 2 * 1024 * 1024 }, // قلل الحجم لـ 2MB لسرعة الـ Serverless
 });
 
-module.exports = upload; // Export the upload middleware for use in routes
+module.exports = upload;
