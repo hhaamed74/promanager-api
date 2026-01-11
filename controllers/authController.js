@@ -14,24 +14,28 @@ const generateToken = (id) => {
  * @route   POST /api/auth/register
  * @access  Public
  */
-exports.register = async (req, res) => {
+// أضفنا next هنا كباراميتر ثالث لضمان توافقها مع Express Middleware
+exports.register = async (req, res, next) => {
   try {
     const { name, email, password, confirmPassword, role } = req.body;
 
-    // Check if the user already exists in the database
+    // 1. التحقق من وجود المستخدم
     const userExists = await User.findOne({ email });
-    if (userExists)
+    if (userExists) {
       return res
         .status(400)
         .json({ success: false, message: "هذا البريد مسجل بالفعل" });
+    }
 
-    // Validate that passwords match
-    if (password !== confirmPassword)
+    // 2. التحقق من تطابق كلمات المرور
+    if (password !== confirmPassword) {
       return res
         .status(400)
         .json({ success: false, message: "كلمات المرور غير متطابقة" });
+    }
 
-    // Create the new user record
+    // 3. إنشاء المستخدم
+    // ملاحظة: الـ Hashing بيحصل في User Model (pre-save hook) كما أرسلت سابقاً
     const user = await User.create({
       name,
       email,
@@ -39,7 +43,8 @@ exports.register = async (req, res) => {
       role: role || "user",
     });
 
-    res.status(201).json({
+    // 4. إرسال الرد بنجاح
+    return res.status(201).json({
       success: true,
       token: generateToken(user._id),
       user: {
@@ -51,7 +56,13 @@ exports.register = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    // هنا مربط الفرس: لا تنادي next(error) إذا كنت تريد إرسال JSON مخصص
+    // بل أرسل الرد مباشرة كما فعلت أنت، ولكن تأكد من وجود res
+    console.error("Register Error:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "حدث خطأ في الخادم أثناء التسجيل: " + error.message,
+    });
   }
 };
 
