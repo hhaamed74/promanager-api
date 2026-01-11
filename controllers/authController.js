@@ -14,12 +14,12 @@ const generateToken = (id) => {
  * @route   POST /api/auth/register
  * @access  Public
  */
-// أضفنا next هنا كباراميتر ثالث لضمان توافقها مع Express Middleware
+// 1. لازم تضيف next هنا كـ parameter تالت
 exports.register = async (req, res, next) => {
   try {
     const { name, email, password, confirmPassword, role } = req.body;
 
-    // 1. التحقق من وجود المستخدم
+    // 2. التحقق من وجود المستخدم
     const userExists = await User.findOne({ email });
     if (userExists) {
       return res
@@ -27,15 +27,14 @@ exports.register = async (req, res, next) => {
         .json({ success: false, message: "هذا البريد مسجل بالفعل" });
     }
 
-    // 2. التحقق من تطابق كلمات المرور
+    // 3. التحقق من تطابق كلمات المرور
     if (password !== confirmPassword) {
       return res
         .status(400)
         .json({ success: false, message: "كلمات المرور غير متطابقة" });
     }
 
-    // 3. إنشاء المستخدم
-    // ملاحظة: الـ Hashing بيحصل في User Model (pre-save hook) كما أرسلت سابقاً
+    // 4. إنشاء المستخدم (التشفير بيحصل في الموديل عندك وده صح)
     const user = await User.create({
       name,
       email,
@@ -43,7 +42,7 @@ exports.register = async (req, res, next) => {
       role: role || "user",
     });
 
-    // 4. إرسال الرد بنجاح
+    // 5. إرسال الرد
     return res.status(201).json({
       success: true,
       token: generateToken(user._id),
@@ -52,16 +51,15 @@ exports.register = async (req, res, next) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        avatar: user.avatar,
       },
     });
   } catch (error) {
-    // هنا مربط الفرس: لا تنادي next(error) إذا كنت تريد إرسال JSON مخصص
-    // بل أرسل الرد مباشرة كما فعلت أنت، ولكن تأكد من وجود res
-    console.error("Register Error:", error.message);
+    // 6. هنا كان الخطأ! لو كتبت next(error) والدالة فوق مفيهاش next هيطلع الخطأ بتاعك
+    // الأفضل في Vercel تبعت الرد مباشرة كدا:
+    console.error("Register Error Details:", error);
     return res.status(500).json({
       success: false,
-      message: "حدث خطأ في الخادم أثناء التسجيل: " + error.message,
+      message: "خطأ داخلي: " + error.message,
     });
   }
 };
