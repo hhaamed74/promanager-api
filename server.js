@@ -14,7 +14,13 @@ connectDB();
 const app = express();
 
 // 3. Essential Middlewares
-app.use(cors()); // Enable CORS for all incoming requests
+app.use(
+  cors({
+    origin: "*", // مؤقتاً عشان تتأكد إن كل حاجة شغالة، وبعدين ممكن تحط رابط الفرونت بس
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true,
+  })
+);
 app.use(express.json()); // Middleware to parse and read JSON data from the request body
 
 // 4. Set up the Static Folder for file uploads
