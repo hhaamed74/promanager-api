@@ -1,17 +1,18 @@
 const User = require("../models/User");
+const Project = require("../models/Project"); // استدعاء الموديل هنا مرة واحدة فقط في بداية الملف
 const jwt = require("jsonwebtoken");
 
+// دالة توليد التوكن
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "30d" });
 };
 
-// --- تعريف الدوال ---
+// --- تعريف الدوال (تم حذف كلمة next نهائياً لمنع تعارض Express) ---
 
 const register = async (req, res) => {
   try {
     const { name, email, password, confirmPassword, role } = req.body;
 
-    // 1. التحقق من البيانات
     if (!name || !email || !password || !confirmPassword) {
       return res
         .status(400)
@@ -31,7 +32,6 @@ const register = async (req, res) => {
         .json({ success: false, message: "كلمات المرور غير متطابقة" });
     }
 
-    // 2. إنشاء المستخدم
     const user = await User.create({
       name,
       email,
@@ -39,7 +39,6 @@ const register = async (req, res) => {
       role: role || "user",
     });
 
-    // 3. الرد بنجاح
     return res.status(201).json({
       success: true,
       token: generateToken(user._id),
@@ -51,7 +50,6 @@ const register = async (req, res) => {
       },
     });
   } catch (error) {
-    // هنا كان الخطأ، شلنا كلمة next عشان ميطلعش Error
     console.error("Register Error:", error);
     return res.status(500).json({
       success: false,
@@ -60,15 +58,17 @@ const register = async (req, res) => {
   }
 };
 
-const login = async (req, res, next) => {
+const login = async (req, res) => {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email }).select("+password");
+
     if (user && (await user.matchPassword(password))) {
-      if (!user.isActive)
+      if (!user.isActive) {
         return res
           .status(401)
           .json({ success: false, message: "هذا الحساب معطل" });
+      }
       return res.json({
         success: true,
         token: generateToken(user._id),
@@ -91,12 +91,12 @@ const login = async (req, res, next) => {
   }
 };
 
-const getDashboardStats = async (req, res, next) => {
+const getDashboardStats = async (req, res) => {
   try {
     const usersCount = await User.countDocuments();
-    const Project = require("../models/Project");
     const projectsCount = await Project.countDocuments();
     const completedProjects = await Project.countDocuments({ status: "مكتمل" });
+
     return res.json({
       success: true,
       stats: {
@@ -112,18 +112,22 @@ const getDashboardStats = async (req, res, next) => {
   }
 };
 
-const updateUserProfile = async (req, res, next) => {
+const updateUserProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
     if (!user)
       return res
         .status(404)
         .json({ success: false, message: "المستخدم غير موجود" });
+
     user.name = req.body.name || user.name;
     user.email = req.body.email || user.email;
+
     if (req.file) {
-      user.avatar = req.file.filename;
+      // تعديل ليتناسب مع MemoryStorage المستخدم في Vercel
+      user.avatar = req.file.originalname;
     }
+
     const updatedUser = await user.save();
     return res.json({ success: true, user: updatedUser });
   } catch (error) {
@@ -133,7 +137,7 @@ const updateUserProfile = async (req, res, next) => {
   }
 };
 
-const getAllUsers = async (req, res, next) => {
+const getAllUsers = async (req, res) => {
   try {
     const users = await User.find({}).sort("-createdAt");
     return res.json({ success: true, data: users });
@@ -144,7 +148,7 @@ const getAllUsers = async (req, res, next) => {
   }
 };
 
-const deleteUser = async (req, res, next) => {
+const deleteUser = async (req, res) => {
   try {
     await User.findByIdAndDelete(req.params.id);
     return res.json({ success: true, message: "تم الحذف بنجاح" });
@@ -155,15 +159,20 @@ const deleteUser = async (req, res, next) => {
   }
 };
 
-const toggleUserStatus = async (req, res, next) => {
+const toggleUserStatus = async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "المستخدم غير موجود" });
+
     user.isActive = !user.isActive;
     await user.save();
     return res.json({
       success: true,
       status: user.isActive,
-      message: "تم تغيير الحالة",
+      message: "تم تغيير الحالة بنجاح",
     });
   } catch (error) {
     return res
@@ -172,14 +181,14 @@ const toggleUserStatus = async (req, res, next) => {
   }
 };
 
-const getActivities = async (req, res, next) => {
+const getActivities = async (req, res) => {
   try {
-    const Project = require("../models/Project");
     const latestUsers = await User.find().sort({ createdAt: -1 }).limit(5);
     const latestProjects = await Project.find()
       .populate("user", "name")
       .sort({ createdAt: -1 })
       .limit(5);
+
     let notifications = [];
     latestUsers.forEach((u) =>
       notifications.push({
@@ -195,6 +204,7 @@ const getActivities = async (req, res, next) => {
         type: "project",
       })
     );
+
     notifications.sort((a, b) => new Date(b.date) - new Date(a.date));
     return res.json({ success: true, data: notifications.slice(0, 5) });
   } catch (error) {
@@ -204,7 +214,7 @@ const getActivities = async (req, res, next) => {
   }
 };
 
-// --- التصدير النهائي ---
+// --- التصدير النهائي الموحد ---
 module.exports = {
   register,
   login,
