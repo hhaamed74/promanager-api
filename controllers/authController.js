@@ -14,24 +14,27 @@ const generateToken = (id) => {
  * @route   POST /api/auth/register
  * @access  Public
  */
-exports.register = async (req, res) => {
+// أضف next هنا في المعاملات لضمان أن الترتيب (req, res, next)
+exports.register = async (req, res, next) => {
   try {
     const { name, email, password, confirmPassword, role } = req.body;
 
-    // Check if the user already exists in the database
+    // التحقق من وجود المستخدم
     const userExists = await User.findOne({ email });
-    if (userExists)
+    if (userExists) {
       return res
         .status(400)
         .json({ success: false, message: "هذا البريد مسجل بالفعل" });
+    }
 
-    // Validate that passwords match
-    if (password !== confirmPassword)
+    // التحقق من تطابق كلمة المرور
+    if (password !== confirmPassword) {
       return res
         .status(400)
         .json({ success: false, message: "كلمات المرور غير متطابقة" });
+    }
 
-    // Create the new user record
+    // إنشاء المستخدم
     const user = await User.create({
       name,
       email,
@@ -39,7 +42,8 @@ exports.register = async (req, res) => {
       role: role || "user",
     });
 
-    res.status(201).json({
+    // إرسال الرد بنجاح
+    return res.status(201).json({
       success: true,
       token: generateToken(user._id),
       user: {
@@ -47,11 +51,17 @@ exports.register = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        avatar: user.avatar,
       },
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    // هنا مربط الفرس: إذا لم تكن next دالة، سنستخدم res مباشرة
+    console.error("Caught error in register:", error.message);
+
+    if (typeof next === "function") {
+      return next(error);
+    } else {
+      return res.status(500).json({ success: false, message: error.message });
+    }
   }
 };
 
