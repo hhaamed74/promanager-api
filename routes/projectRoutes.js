@@ -1,6 +1,6 @@
-const express = require("express"); // Import Express framework
-const router = express.Router(); // Create an Express router instance
-const upload = require("../middleware/uploadMiddleware"); // Import middleware for handling file uploads
+const express = require("express");
+const router = express.Router();
+const upload = require("../middleware/uploadMiddleware");
 const {
   createProject,
   getProjects,
@@ -9,36 +9,24 @@ const {
   deleteProject,
   getProjectStats,
   getMyProjects,
-} = require("../controllers/projectController"); // Import project controller functions
-const { protect } = require("../middleware/authMiddleware"); // Import authentication protection middleware
+} = require("../controllers/projectController");
+const { protect } = require("../middleware/authMiddleware");
 
-/**
- * Global Project Routes
- * Handling root path "/" for fetching all projects and creating new ones
- */
+// 1. المسارات الثابتة (Static Routes) - يجب أن تكون في البداية
+router.get("/my-projects", protect, getMyProjects);
+router.get("/stats/count", protect, getProjectStats);
+
+// 2. المسارات التي تتعامل مع الجذر "/"
 router
   .route("/")
-  .get(protect, getProjects) // Protected route to fetch all projects
-  .post(protect, upload.single("image"), createProject); // Protected route to create a project with an image upload
+  .get(protect, getProjects)
+  .post(protect, upload.single("image"), createProject);
 
-/**
- * User-Specific Project Routes
- */
-router.get("/my-projects", protect, getMyProjects); // Fetch projects belonging to the logged-in user
-
-/**
- * Project Statistics Routes
- */
-router.get("/stats/count", protect, getProjectStats); // Get total count and statistics of projects
-
-/**
- * Specific Project ID Routes
- * Handling operations for a single project by its ID
- */
+// 3. المسارات التي تحتوي على معاملات (Dynamic IDs) - يجب أن تكون في النهاية
 router
   .route("/:id")
-  .get(protect, getProjectById) // Fetch a single project detail by ID
-  .put(protect, upload.single("image"), updateProject) // Update project info and optionally replace the image
-  .delete(protect, deleteProject); // Delete a specific project by ID
+  .get(protect, getProjectById)
+  .put(protect, upload.single("image"), updateProject)
+  .delete(protect, deleteProject);
 
-module.exports = router; // Export the router to be used in server.js
+module.exports = router;

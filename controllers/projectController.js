@@ -1,7 +1,7 @@
-const Project = require("../models/Project"); // Import the Project model
+const Project = require("../models/Project"); // استيراد موديل المشروع
 
 /**
- * @desc    Create a new project
+ * @desc    إنشاء مشروع جديد
  * @route   POST /api/projects
  * @access  Private
  */
@@ -17,9 +17,9 @@ exports.createProject = async (req, res) => {
       priority,
       deadline,
       category,
-      // Normalize image path by replacing backslashes with forward slashes
-      image: req.file ? req.file.path.replace(/\\/g, "/") : "",
-      user: req.user.id, // Link project to the currently authenticated user
+      // التعديل هنا: نأخذ الرابط من كلوديناري مباشرة بدون replace
+      image: req.file ? req.file.path : "",
+      user: req.user.id, // ربط المشروع بالمستخدم اللي عامل login
     });
 
     res.status(201).json({
@@ -37,27 +37,9 @@ exports.createProject = async (req, res) => {
 };
 
 /**
- * @desc    Get all projects with owner details
- * @route   GET /api/projects
- * @access  Private
- */
-exports.getProjects = async (req, res) => {
-  try {
-    // Fetch all projects and populate user details (name and avatar)
-    const projects = await Project.find()
-      .populate("user", "name avatar")
-      .sort("-createdAt"); // Sort by newest first
-
-    res.status(200).json({ success: true, data: projects });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-/**
- * @desc    Update an existing project
+ * @desc    تعديل مشروع موجود
  * @route   PUT /api/projects/:id
- * @access  Private (Owner or Admin)
+ * @access  Private (المالك أو الأدمن)
  */
 exports.updateProject = async (req, res) => {
   try {
@@ -65,22 +47,20 @@ exports.updateProject = async (req, res) => {
 
     if (!project) return res.status(404).json({ message: "المشروع غير موجود" });
 
-    // Authorization check: only owner or admin can update
+    // التحقق من الصلاحية
     if (project.user.toString() !== req.user.id && req.user.role !== "admin") {
       return res
         .status(401)
         .json({ message: "غير مسموح لك بتعديل هذا المشروع" });
     }
 
-    // Combine textual data from request body
     let updatedData = { ...req.body };
 
-    // Update image path if a new file is uploaded
+    // إذا تم رفع صورة جديدة، نحدث الرابط برابط كلوديناري الجديد
     if (req.file) {
-      updatedData.image = req.file.path.replace(/\\/g, "/");
+      updatedData.image = req.file.path;
     }
 
-    // Apply updates and return the modified document
     project = await Project.findByIdAndUpdate(req.params.id, updatedData, {
       new: true,
       runValidators: true,
@@ -93,9 +73,24 @@ exports.updateProject = async (req, res) => {
 };
 
 /**
- * @desc    Delete a project
+ * @desc    جلب كل المشاريع مع بيانات أصحابها
+ * @route   GET /api/projects
+ */
+exports.getProjects = async (req, res) => {
+  try {
+    const projects = await Project.find()
+      .populate("user", "name avatar") // جلب اسم وصورة صاحب المشروع
+      .sort("-createdAt");
+
+    res.status(200).json({ success: true, data: projects });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * @desc    حذف مشروع
  * @route   DELETE /api/projects/:id
- * @access  Private (Owner or Admin)
  */
 exports.deleteProject = async (req, res) => {
   try {
@@ -103,7 +98,6 @@ exports.deleteProject = async (req, res) => {
 
     if (!project) return res.status(404).json({ message: "المشروع غير موجود" });
 
-    // Authorization check: only owner or admin can delete
     if (project.user.toString() !== req.user.id && req.user.role !== "admin") {
       return res.status(401).json({ message: "غير مسموح لك بحذف هذا المشروع" });
     }
@@ -116,13 +110,14 @@ exports.deleteProject = async (req, res) => {
 };
 
 /**
- * @desc    Get a single project by ID
- * @route   GET /api/projects/:id
- * @access  Private
+ * @desc    جلب بيانات مشروع واحد
  */
 exports.getProjectById = async (req, res) => {
   try {
-    const project = await Project.findById(req.params.id);
+    const project = await Project.findById(req.params.id).populate(
+      "user",
+      "name avatar"
+    );
     if (!project)
       return res
         .status(404)
@@ -135,16 +130,11 @@ exports.getProjectById = async (req, res) => {
 };
 
 /**
- * @desc    Get counts for dashboard statistics
- * @route   GET /api/projects/stats/count
- * @access  Private
+ * @desc    إحصائيات المشاريع للمستخدم الحالي
  */
 exports.getProjectStats = async (req, res) => {
   try {
-    // Count total projects belonging to the logged-in user
     const totalProjects = await Project.countDocuments({ user: req.user.id });
-
-    // Count only projects marked as "مكتمل" for the user
     const completedProjects = await Project.countDocuments({
       user: req.user.id,
       status: "مكتمل",
@@ -163,22 +153,14 @@ exports.getProjectStats = async (req, res) => {
 };
 
 /**
- * @desc    Get projects belonging only to the current user
- * @route   GET /api/projects/my-projects
- * @access  Private
+ * @desc    جلب مشاريعي فقط
  */
 exports.getMyProjects = async (req, res) => {
   try {
-    // Filter projects by user ID extracted from the 'protect' middleware
     const projects = await Project.find({ user: req.user.id }).sort(
       "-createdAt"
     );
-
-    res.json({
-      success: true,
-      count: projects.length,
-      data: projects,
-    });
+    res.json({ success: true, count: projects.length, data: projects });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

@@ -1,39 +1,30 @@
-const multer = require("multer"); // Import Multer for handling multipart/form-data (file uploads)
-const path = require("path"); // Import Path module to handle file extensions
+const cloudinary = require("cloudinary").v2;
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
+const multer = require("multer");
 
-// 1. Storage Configuration: Defines the destination and filename logic
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/"); // Files will be stored in the 'uploads' directory
-  },
-  filename: (req, file, cb) => {
-    // Generate a unique filename using the current timestamp and the original file name
-    cb(null, `${Date.now()}-${file.originalname}`);
-  },
+// 1. Configuration: الربط مع حساب كلوديناري
+// تأكد من إضافة هذه المتغيرات في Environment Variables على Vercel
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// 2. File Filter Configuration: Ensures only specific image types are allowed
-const fileFilter = (req, file, cb) => {
-  const filetypes = /jpe?g|png|webp/; // Allowed extensions: jpg, jpeg, png, webp
-  const mimetypes = /image\/jpe?g|image\/png|image\/webp/; // Allowed MIME types
-
-  // Validate the file extension and the mimetype
-  const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
-  const mimetype = mimetypes.test(file.mimetype);
-
-  if (extname && mimetype) {
-    cb(null, true); // Accept the file
-  } else {
-    // Reject the file with an Arabic error message for the user
-    cb(new Error("مسموح برفع الصور فقط (jpg, png, webp)"), false);
-  }
-};
+// 2. Cloud Storage Configuration: إعدادات التخزين السحابي
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: "promanager_uploads", // اسم الفولدر اللي هيتفتح في كلوديناري
+    allowed_formats: ["jpg", "png", "jpeg", "webp"],
+    public_id: (req, file) =>
+      `${Date.now()}-${file.originalname.split(".")[0]}`,
+  },
+});
 
 // 3. Multer Middleware Initialization
 const upload = multer({
-  storage, // Apply the storage configuration defined above
-  fileFilter, // Apply the file type restrictions
-  limits: { fileSize: 5 * 1024 * 1024 }, // Set maximum file size limit to 5MB
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
 });
 
-module.exports = upload; // Export the upload middleware for use in routes
+module.exports = upload;

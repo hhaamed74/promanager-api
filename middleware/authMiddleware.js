@@ -1,29 +1,28 @@
-const jwt = require("jsonwebtoken"); // Import JSON Web Token library for authentication
-const User = require("../models/User"); // Import User model to verify users in the database
+const jwt = require("jsonwebtoken");
+const User = require("../models/User");
 
 /**
  * 1. Protect Middleware
- * Ensures the user is logged in by verifying the JWT token
+ * التحقق من التوكن وصلاحية المستخدم
  */
 exports.protect = async (req, res, next) => {
   let token;
 
-  // Check for token in the Authorization header
+  // التحقق من وجود التوكن في الـ Header
   if (
     req.headers.authorization &&
     req.headers.authorization.startsWith("Bearer")
   ) {
     try {
-      // Extract the token from the "Bearer <token>" string
+      // استخراج التوكن
       token = req.headers.authorization.split(" ")[1];
 
-      // Verify the token validity using the secret key
+      // فك تشفير التوكن
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // Fetch the user data from DB and attach it to the request object (excluding password)
+      // جلب بيانات المستخدم والتأكد أنه موجود ونشط
       req.user = await User.findById(decoded.id).select("-password");
 
-      // Handle case where user no longer exists in the database
       if (!req.user) {
         return res.status(401).json({
           success: false,
@@ -31,26 +30,25 @@ exports.protect = async (req, res, next) => {
         });
       }
 
-      // Check account status (Active/Inactive feature)
+      // التحقق من حالة الحساب (خاصية التعطيل)
       if (!req.user.isActive) {
         return res.status(401).json({
           success: false,
-          message: "هذا الحساب معطل حالياً",
+          message: "هذا الحساب معطل حالياً، تواصل مع المسؤول",
         });
       }
 
-      // Proceed to the next middleware or controller
       return next();
     } catch (error) {
       console.error("JWT Verification Error:", error.message);
       return res.status(401).json({
         success: false,
-        message: "التوكن غير صالح أو منتهي الصلاحية",
+        message: "الجلسة انتهت، برجاء تسجيل الدخول مرة أخرى",
       });
     }
   }
 
-  // Handle case where no token is provided in headers
+  // إذا لم يتم إرسال توكن من الأساس
   if (!token) {
     return res.status(401).json({
       success: false,
@@ -61,12 +59,10 @@ exports.protect = async (req, res, next) => {
 
 /**
  * 2. Authorize Middleware
- * Restricts access based on user roles (e.g., admin, user)
- * @param {...String} roles - List of allowed roles
+ * تحديد الصلاحيات بناءً على الأدوار (Admin, User)
  */
 exports.authorize = (...roles) => {
   return (req, res, next) => {
-    // Check if user data exists (should be populated by 'protect' middleware)
     if (!req.user) {
       return res.status(401).json({
         success: false,
@@ -74,15 +70,13 @@ exports.authorize = (...roles) => {
       });
     }
 
-    // Verify if the current user's role is included in the permitted roles
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({
         success: false,
-        message: `الدور (${req.user.role}) غير مسموح له بالوصول لهذا المصدر`,
+        message: `الدور الحالي (${req.user.role}) لا يملك صلاحية الوصول لهذا القسم`,
       });
     }
 
-    // User is authorized, proceed to the next function
     next();
   };
 };

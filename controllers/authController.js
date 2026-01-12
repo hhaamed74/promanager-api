@@ -1,20 +1,18 @@
-const User = require("../models/User"); // Import User model
-const jwt = require("jsonwebtoken"); // Import JWT for token generation
+const User = require("../models/User"); // استيراد موديل المستخدم
+const jwt = require("jsonwebtoken"); // استيراد JWT لإنشاء التوكين
 
 /**
- * Helper function to generate a JWT token
- * @param {string} id - The user ID to encode in the token
+ * دالة مساعدة لإنشاء التوكن (JWT)
  */
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "30d" });
 };
 
 /**
- * @desc    Register a new user
+ * @desc    تسجيل مستخدم جديد
  * @route   POST /api/auth/register
  * @access  Public
  */
-// أضف next هنا في المعاملات لضمان أن الترتيب (req, res, next)
 exports.register = async (req, res, next) => {
   try {
     const { name, email, password, confirmPassword, role } = req.body;
@@ -42,7 +40,6 @@ exports.register = async (req, res, next) => {
       role: role || "user",
     });
 
-    // إرسال الرد بنجاح
     return res.status(201).json({
       success: true,
       token: generateToken(user._id),
@@ -54,19 +51,15 @@ exports.register = async (req, res, next) => {
       },
     });
   } catch (error) {
-    // هنا مربط الفرس: إذا لم تكن next دالة، سنستخدم res مباشرة
     console.error("Caught error in register:", error.message);
-
-    if (typeof next === "function") {
-      return next(error);
-    } else {
-      return res.status(500).json({ success: false, message: error.message });
-    }
+    res
+      .status(500)
+      .json({ success: false, message: "خطأ في السيرفر أثناء التسجيل" });
   }
 };
 
 /**
- * @desc    Authenticate user and get token
+ * @desc    تسجيل الدخول
  * @route   POST /api/auth/login
  * @access  Public
  */
@@ -74,16 +67,16 @@ exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Find user and explicitly include password field for comparison
+    // البحث عن المستخدم مع إظهار كلمة المرور للمقارنة
     const user = await User.findOne({ email }).select("+password");
 
-    // Verify user existence and password validity
     if (user && (await user.matchPassword(password))) {
-      // Check if account is active
-      if (!user.isActive)
+      // التحقق مما إذا كان الحساب نشطاً
+      if (!user.isActive) {
         return res
           .status(401)
-          .json({ success: false, message: "هذا الحساب معطل" });
+          .json({ success: false, message: "هذا الحساب معطل من قبل المسؤول" });
+      }
 
       res.json({
         success: true,
@@ -107,28 +100,30 @@ exports.login = async (req, res) => {
 };
 
 /**
- * @desc    Update user profile data
+ * @desc    تحديث بيانات البروفايل (متوافق مع Cloudinary)
  * @route   PUT /api/auth/profile
  * @access  Private
  */
 exports.updateUserProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    if (!user)
+    if (!user) {
       return res
         .status(404)
         .json({ success: false, message: "المستخدم غير موجود" });
+    }
 
-    // Update basic info if provided
+    // تحديث البيانات الأساسية
     user.name = req.body.name || user.name;
     user.email = req.body.email || user.email;
 
-    // Update avatar filename if a new file is uploaded
+    // تحديث الصورة: إذا تم رفع ملف، نستخدم رابط Cloudinary (req.file.path)
     if (req.file) {
-      user.avatar = req.file.filename;
+      user.avatar = req.file.path; // Cloudinary يرجع رابط HTTPS كامل هنا
     }
 
     const updatedUser = await user.save();
+
     res.json({
       success: true,
       user: {
@@ -145,7 +140,7 @@ exports.updateUserProfile = async (req, res) => {
 };
 
 /**
- * @desc    Delete a user account
+ * @desc    حذف حساب مستخدم
  * @route   DELETE /api/auth/users/:id
  * @access  Private (Admin Only)
  */
@@ -159,21 +154,25 @@ exports.deleteUser = async (req, res) => {
 };
 
 /**
- * @desc    Enable or Disable user account
+ * @desc    تغيير حالة الحساب (تعطيل/تفعيل)
  * @route   PUT /api/auth/users/:id/toggle
  * @access  Private (Admin Only)
  */
 exports.toggleUserStatus = async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
-    // Reverse the current active status
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "المستخدم غير موجود" });
+
     user.isActive = !user.isActive;
     await user.save();
 
     res.json({
       success: true,
       status: user.isActive,
-      message: "تم تغيير الحالة",
+      message: user.isActive ? "تم تفعيل الحساب" : "تم تعطيل الحساب",
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -181,7 +180,7 @@ exports.toggleUserStatus = async (req, res) => {
 };
 
 /**
- * @desc    Get all registered users
+ * @desc    جلب قائمة كل المستخدمين
  * @route   GET /api/auth/users
  * @access  Private (Admin Only)
  */
@@ -195,14 +194,14 @@ exports.getAllUsers = async (req, res) => {
 };
 
 /**
- * @desc    Get system-wide statistics for the dashboard
+ * @desc    جلب إحصائيات لوحة التحكم
  * @route   GET /api/auth/stats
- * @access  Public
+ * @access  Public/Admin
  */
 exports.getDashboardStats = async (req, res) => {
   try {
     const usersCount = await User.countDocuments();
-    const Project = require("../models/Project"); // Internal import to avoid circular dependency
+    const Project = require("../models/Project");
     const projectsCount = await Project.countDocuments();
     const completedProjects = await Project.countDocuments({ status: "مكتمل" });
 
@@ -220,7 +219,7 @@ exports.getDashboardStats = async (req, res) => {
 };
 
 /**
- * @desc    Get recent system activities and notifications
+ * @desc    جلب آخر النشاطات والإشعارات
  * @route   GET /api/auth/activities
  * @access  Private (Admin Only)
  */
@@ -228,7 +227,6 @@ exports.getActivities = async (req, res) => {
   try {
     const Project = require("../models/Project");
 
-    // Retrieve the 5 most recent users and projects
     const latestUsers = await User.find().sort({ createdAt: -1 }).limit(5);
     const latestProjects = await Project.find()
       .populate("user", "name")
@@ -237,7 +235,6 @@ exports.getActivities = async (req, res) => {
 
     let notifications = [];
 
-    // Format user notifications
     latestUsers.forEach((u) => {
       notifications.push({
         text: `مستخدم جديد انضم إلينا: ${u.name}`,
@@ -246,19 +243,17 @@ exports.getActivities = async (req, res) => {
       });
     });
 
-    // Format project notifications
     latestProjects.forEach((p) => {
       notifications.push({
-        text: `مشروع جديد مرفوع: ${p.title} بواسطة ${p.user?.name || "مستخدم"}`,
+        text: `مشروع جديد: ${p.title} بواسطة ${p.user?.name || "مجهول"}`,
         date: p.createdAt,
         type: "project",
       });
     });
 
-    // Sort notifications by date (newest first)
+    // ترتيب الإشعارات من الأحدث للأقدم
     notifications.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-    // Send only the top 5 most recent activities
     res.json({ success: true, data: notifications.slice(0, 5) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

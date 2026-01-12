@@ -1,54 +1,49 @@
-const mongoose = require("mongoose"); // Import Mongoose library for MongoDB interaction
+const mongoose = require("mongoose");
 
 const projectSchema = new mongoose.Schema(
   {
     title: {
       type: String,
-      required: [true, "عنوان المشروع مطلوب"], // Validation: Project title is mandatory
-      trim: true, // Remove extra spaces from the title
-      maxlength: [100, "العنوان لا يمكن أن يزيد عن 100 حرف"], // Title length restriction
+      required: [true, "عنوان المشروع مطلوب"],
+      trim: true,
+      maxlength: [100, "العنوان لا يمكن أن يزيد عن 100 حرف"],
     },
     description: {
       type: String,
-      required: [true, "وصف المشروع مطلوب"], // Validation: Project description is mandatory
-      trim: true, // Remove extra spaces from the description
+      required: [true, "وصف المشروع مطلوب"],
+      trim: true,
     },
-    /**
-     * Project Workflow Fields
-     */
     status: {
       type: String,
-      enum: ["قيد الانتظار", "جاري العمل", "مكتمل"], // Valid status values in Arabic
-      default: "قيد الانتظار", // Default project status
+      enum: ["قيد الانتظار", "جاري العمل", "مكتمل"],
+      default: "قيد الانتظار",
     },
     priority: {
       type: String,
-      enum: ["منخفضة", "متوسطة", "عالية"], // Valid priority values in Arabic
-      default: "متوسطة", // Default priority level
+      enum: ["منخفضة", "متوسطة", "عالية"],
+      default: "متوسطة",
     },
     deadline: {
       type: Date,
-      required: [true, "يجب تحديد تاريخ انتهاء للمشروع"], // Validation: Deadline date is required
+      required: [true, "يجب تحديد تاريخ انتهاء للمشروع"],
     },
     category: {
       type: String,
-      enum: ["برمجة", "تصميم", "تسويق", "إدارة", "أخرى"], // Project category categories in Arabic
-      default: "أخرى", // Default category
+      enum: ["برمجة", "تصميم", "تسويق", "إدارة", "أخرى"],
+      default: "أخرى",
     },
     image: {
-      type: String, // Field to store the path/URL of the project image
-      default: "default-project.jpg", // Fallback image if none is provided
+      type: String,
+      // التعديل: نضع رابط صورة افتراضية HTTPS لضمان عدم حدوث Mixed Content
+      default: "https://via.placeholder.com/800x400?text=No+Project+Image",
     },
-    /**
-     * Relational Data
-     */
     user: {
-      type: mongoose.Schema.Types.ObjectId, // Data type to store MongoDB ObjectId
-      ref: "User", // Reference link to the User collection/model
-      required: true, // Each project must be linked to a specific user
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
     },
   },
-  { timestamps: true } // Automatically manages createdAt and updatedAt timestamps
+  { timestamps: true }
 );
 
-module.exports = mongoose.model("Project", projectSchema); // Export the Project model for use in other files
+module.exports = mongoose.model("Project", projectSchema);
