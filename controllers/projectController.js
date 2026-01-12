@@ -1,9 +1,9 @@
-const Project = require("../models/Project"); // استيراد موديل المشروع
+const Project = require("../models/Project");
+const Activity = require("../models/Activity");
 
 /**
- * @desc    إنشاء مشروع جديد
+ * @desc    إنشاء مشروع جديد وتسجيل النشاط
  * @route   POST /api/projects
- * @access  Private
  */
 exports.createProject = async (req, res) => {
   try {
@@ -17,9 +17,15 @@ exports.createProject = async (req, res) => {
       priority,
       deadline,
       category,
-      // التعديل هنا: نأخذ الرابط من كلوديناري مباشرة بدون replace
-      image: req.file ? req.file.path : "",
-      user: req.user.id, // ربط المشروع بالمستخدم اللي عامل login
+      image: req.file ? req.file.filename : "",
+      user: req.user.id,
+    });
+
+    // تسجيل النشاط في قاعدة البيانات ليظهر في الإشعارات
+    await Activity.create({
+      user: req.user.id,
+      message: `قام المستخدم ${req.user.name} بإضافة مشروع جديد: ${title}`,
+      type: "project",
     });
 
     res.status(201).json({
@@ -39,7 +45,6 @@ exports.createProject = async (req, res) => {
 /**
  * @desc    تعديل مشروع موجود
  * @route   PUT /api/projects/:id
- * @access  Private (المالك أو الأدمن)
  */
 exports.updateProject = async (req, res) => {
   try {
@@ -47,7 +52,6 @@ exports.updateProject = async (req, res) => {
 
     if (!project) return res.status(404).json({ message: "المشروع غير موجود" });
 
-    // التحقق من الصلاحية
     if (project.user.toString() !== req.user.id && req.user.role !== "admin") {
       return res
         .status(401)
@@ -55,15 +59,20 @@ exports.updateProject = async (req, res) => {
     }
 
     let updatedData = { ...req.body };
-
-    // إذا تم رفع صورة جديدة، نحدث الرابط برابط كلوديناري الجديد
     if (req.file) {
-      updatedData.image = req.file.path;
+      updatedData.image = req.file.filename;
     }
 
     project = await Project.findByIdAndUpdate(req.params.id, updatedData, {
       new: true,
       runValidators: true,
+    });
+
+    // اختياري: تسجيل نشاط عند التعديل
+    await Activity.create({
+      user: req.user.id,
+      message: `تم تحديث بيانات المشروع: ${project.title}`,
+      type: "project",
     });
 
     res.json({ success: true, data: project });
@@ -73,15 +82,13 @@ exports.updateProject = async (req, res) => {
 };
 
 /**
- * @desc    جلب كل المشاريع مع بيانات أصحابها
- * @route   GET /api/projects
+ * @desc    جلب كل المشاريع
  */
 exports.getProjects = async (req, res) => {
   try {
     const projects = await Project.find()
-      .populate("user", "name avatar") // جلب اسم وصورة صاحب المشروع
+      .populate("user", "name avatar")
       .sort("-createdAt");
-
     res.status(200).json({ success: true, data: projects });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -89,18 +96,22 @@ exports.getProjects = async (req, res) => {
 };
 
 /**
- * @desc    حذف مشروع
- * @route   DELETE /api/projects/:id
+ * @desc    حذف مشروع وتسجيل النشاط
  */
 exports.deleteProject = async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
-
     if (!project) return res.status(404).json({ message: "المشروع غير موجود" });
 
     if (project.user.toString() !== req.user.id && req.user.role !== "admin") {
       return res.status(401).json({ message: "غير مسموح لك بحذف هذا المشروع" });
     }
+
+    await Activity.create({
+      user: req.user.id,
+      message: `تم حذف المشروع: ${project.title}`,
+      type: "project",
+    });
 
     await project.deleteOne();
     res.json({ success: true, message: "تم حذف المشروع بنجاح" });
@@ -122,7 +133,6 @@ exports.getProjectById = async (req, res) => {
       return res
         .status(404)
         .json({ success: false, message: "المشروع غير موجود" });
-
     res.status(200).json({ success: true, data: project });
   } catch (error) {
     res.status(500).json({ success: false, message: "خطأ في السيرفر" });
@@ -130,30 +140,7 @@ exports.getProjectById = async (req, res) => {
 };
 
 /**
- * @desc    إحصائيات المشاريع للمستخدم الحالي
- */
-exports.getProjectStats = async (req, res) => {
-  try {
-    const totalProjects = await Project.countDocuments({ user: req.user.id });
-    const completedProjects = await Project.countDocuments({
-      user: req.user.id,
-      status: "مكتمل",
-    });
-
-    res.status(200).json({
-      success: true,
-      data: {
-        total: totalProjects,
-        completed: completedProjects,
-      },
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: "خطأ في جلب الإحصائيات" });
-  }
-};
-
-/**
- * @desc    جلب مشاريعي فقط
+ * @desc    جلب مشاريعي الشخصية
  */
 exports.getMyProjects = async (req, res) => {
   try {
@@ -163,5 +150,24 @@ exports.getMyProjects = async (req, res) => {
     res.json({ success: true, count: projects.length, data: projects });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * @desc    إحصائيات مشاريع المستخدم
+ */
+exports.getProjectStats = async (req, res) => {
+  try {
+    const totalProjects = await Project.countDocuments({ user: req.user.id });
+    const completedProjects = await Project.countDocuments({
+      user: req.user.id,
+      status: "مكتمل",
+    });
+    res.status(200).json({
+      success: true,
+      data: { total: totalProjects, completed: completedProjects },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "خطأ في جلب الإحصائيات" });
   }
 };

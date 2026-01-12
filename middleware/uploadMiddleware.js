@@ -1,30 +1,45 @@
-const cloudinary = require("cloudinary").v2;
-const { CloudinaryStorage } = require("multer-storage-cloudinary");
 const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
 
-// 1. Configuration: الربط مع حساب كلوديناري
-// تأكد من إضافة هذه المتغيرات في Environment Variables على Vercel
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+// 1. التأكد من وجود مجلد uploads، وإذا لم يوجد يتم إنشاؤه تلقائياً
+const uploadDir = "uploads/";
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
 
-// 2. Cloud Storage Configuration: إعدادات التخزين السحابي
-const storage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: {
-    folder: "promanager_uploads", // اسم الفولدر اللي هيتفتح في كلوديناري
-    allowed_formats: ["jpg", "png", "jpeg", "webp"],
-    public_id: (req, file) =>
-      `${Date.now()}-${file.originalname.split(".")[0]}`,
+// 2. إعداد التخزين على القرص (Disk Storage)
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir); // تحديد المجلد الذي ستُحفظ فيه الصور
+  },
+  filename: (req, file, cb) => {
+    // تكوين اسم فريد للملف: التاريخ + الاسم الأصلي
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
   },
 });
 
-// 3. Multer Middleware Initialization
+// 3. فلترة الملفات (التأكد من أنها صور فقط)
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = /jpeg|jpg|png|webp/;
+  const extname = allowedTypes.test(
+    path.extname(file.originalname).toLowerCase()
+  );
+  const mimetype = allowedTypes.test(file.mimetype);
+
+  if (extname && mimetype) {
+    return cb(null, true);
+  } else {
+    cb(new Error("عذراً، يسمح برفع الصور فقط (jpg, png, webp)"));
+  }
+};
+
+// 4. تهيئة Multer
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: fileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 }, // الحد الأقصى 5 ميجابايت
 });
 
 module.exports = upload;

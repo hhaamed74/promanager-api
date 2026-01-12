@@ -1,5 +1,7 @@
-const User = require("../models/User"); // استيراد موديل المستخدم
-const jwt = require("jsonwebtoken"); // استيراد JWT لإنشاء التوكين
+const User = require("../models/User");
+const Project = require("../models/Project");
+const Activity = require("../models/Activity"); // ضروري جداً لعمل الإشعارات
+const jwt = require("jsonwebtoken");
 
 /**
  * دالة مساعدة لإنشاء التوكن (JWT)
@@ -8,16 +10,16 @@ const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "30d" });
 };
 
+// --- وظائف المستخدم العامة ---
+
 /**
  * @desc    تسجيل مستخدم جديد
  * @route   POST /api/auth/register
- * @access  Public
  */
-exports.register = async (req, res, next) => {
+exports.register = async (req, res) => {
   try {
     const { name, email, password, confirmPassword, role } = req.body;
 
-    // التحقق من وجود المستخدم
     const userExists = await User.findOne({ email });
     if (userExists) {
       return res
@@ -25,19 +27,24 @@ exports.register = async (req, res, next) => {
         .json({ success: false, message: "هذا البريد مسجل بالفعل" });
     }
 
-    // التحقق من تطابق كلمة المرور
     if (password !== confirmPassword) {
       return res
         .status(400)
         .json({ success: false, message: "كلمات المرور غير متطابقة" });
     }
 
-    // إنشاء المستخدم
     const user = await User.create({
       name,
       email,
       password,
       role: role || "user",
+    });
+
+    // تسجيل نشاط: مستخدم جديد انضم
+    await Activity.create({
+      user: user._id,
+      message: `مستخدم جديد انضم للنظام: ${user.name}`,
+      type: "user",
     });
 
     return res.status(201).json({
@@ -51,7 +58,6 @@ exports.register = async (req, res, next) => {
       },
     });
   } catch (error) {
-    console.error("Caught error in register:", error.message);
     res
       .status(500)
       .json({ success: false, message: "خطأ في السيرفر أثناء التسجيل" });
@@ -60,22 +66,17 @@ exports.register = async (req, res, next) => {
 
 /**
  * @desc    تسجيل الدخول
- * @route   POST /api/auth/login
- * @access  Public
  */
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
-
-    // البحث عن المستخدم مع إظهار كلمة المرور للمقارنة
     const user = await User.findOne({ email }).select("+password");
 
     if (user && (await user.matchPassword(password))) {
-      // التحقق مما إذا كان الحساب نشطاً
       if (!user.isActive) {
         return res
           .status(401)
-          .json({ success: false, message: "هذا الحساب معطل من قبل المسؤول" });
+          .json({ success: false, message: "هذا الحساب معطل" });
       }
 
       res.json({
@@ -100,30 +101,21 @@ exports.login = async (req, res) => {
 };
 
 /**
- * @desc    تحديث بيانات البروفايل (متوافق مع Cloudinary)
- * @route   PUT /api/auth/profile
- * @access  Private
+ * @desc    تحديث بيانات البروفايل
  */
 exports.updateUserProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    if (!user) {
-      return res
-        .status(404)
-        .json({ success: false, message: "المستخدم غير موجود" });
-    }
+    if (!user) return res.status(404).json({ message: "المستخدم غير موجود" });
 
-    // تحديث البيانات الأساسية
     user.name = req.body.name || user.name;
     user.email = req.body.email || user.email;
 
-    // تحديث الصورة: إذا تم رفع ملف، نستخدم رابط Cloudinary (req.file.path)
     if (req.file) {
-      user.avatar = req.file.path; // Cloudinary يرجع رابط HTTPS كامل هنا
+      user.avatar = req.file.filename;
     }
 
     const updatedUser = await user.save();
-
     res.json({
       success: true,
       user: {
@@ -139,32 +131,30 @@ exports.updateUserProfile = async (req, res) => {
   }
 };
 
-/**
- * @desc    حذف حساب مستخدم
- * @route   DELETE /api/auth/users/:id
- * @access  Private (Admin Only)
- */
-exports.deleteUser = async (req, res) => {
+// --- وظائف الإدارة (Admin Only) ---
+
+exports.getAllUsers = async (req, res) => {
   try {
-    await User.findByIdAndDelete(req.params.id);
-    res.json({ success: true, message: "تم الحذف بنجاح" });
+    const users = await User.find({}).sort("-createdAt");
+    res.json({ success: true, data: users });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-/**
- * @desc    تغيير حالة الحساب (تعطيل/تفعيل)
- * @route   PUT /api/auth/users/:id/toggle
- * @access  Private (Admin Only)
- */
+exports.deleteUser = async (req, res) => {
+  try {
+    await User.findByIdAndDelete(req.params.id);
+    res.json({ success: true, message: "تم حذف المستخدم بنجاح" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 exports.toggleUserStatus = async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
-    if (!user)
-      return res
-        .status(404)
-        .json({ success: false, message: "المستخدم غير موجود" });
+    if (!user) return res.status(404).json({ message: "المستخدم غير موجود" });
 
     user.isActive = !user.isActive;
     await user.save();
@@ -179,29 +169,14 @@ exports.toggleUserStatus = async (req, res) => {
   }
 };
 
-/**
- * @desc    جلب قائمة كل المستخدمين
- * @route   GET /api/auth/users
- * @access  Private (Admin Only)
- */
-exports.getAllUsers = async (req, res) => {
-  try {
-    const users = await User.find({}).sort("-createdAt");
-    res.json({ success: true, data: users });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
+// --- وظائف الإحصائيات والنشاطات (المعدلة) ---
 
 /**
  * @desc    جلب إحصائيات لوحة التحكم
- * @route   GET /api/auth/stats
- * @access  Public/Admin
  */
 exports.getDashboardStats = async (req, res) => {
   try {
     const usersCount = await User.countDocuments();
-    const Project = require("../models/Project");
     const projectsCount = await Project.countDocuments();
     const completedProjects = await Project.countDocuments({ status: "مكتمل" });
 
@@ -219,42 +194,21 @@ exports.getDashboardStats = async (req, res) => {
 };
 
 /**
- * @desc    جلب آخر النشاطات والإشعارات
+ * @desc    جلب آخر النشاطات الحقيقية من الداتابيز
  * @route   GET /api/auth/activities
- * @access  Private (Admin Only)
  */
 exports.getActivities = async (req, res) => {
   try {
-    const Project = require("../models/Project");
-
-    const latestUsers = await User.find().sort({ createdAt: -1 }).limit(5);
-    const latestProjects = await Project.find()
-      .populate("user", "name")
+    // جلب الأنشطة وترتيبها من الأحدث
+    const activities = await Activity.find()
+      .populate("user", "name avatar")
       .sort({ createdAt: -1 })
-      .limit(5);
+      .limit(10);
 
-    let notifications = [];
-
-    latestUsers.forEach((u) => {
-      notifications.push({
-        text: `مستخدم جديد انضم إلينا: ${u.name}`,
-        date: u.createdAt,
-        type: "user",
-      });
+    res.json({
+      success: true,
+      data: activities,
     });
-
-    latestProjects.forEach((p) => {
-      notifications.push({
-        text: `مشروع جديد: ${p.title} بواسطة ${p.user?.name || "مجهول"}`,
-        date: p.createdAt,
-        type: "project",
-      });
-    });
-
-    // ترتيب الإشعارات من الأحدث للأقدم
-    notifications.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    res.json({ success: true, data: notifications.slice(0, 5) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
